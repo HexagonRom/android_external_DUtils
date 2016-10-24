@@ -27,9 +27,12 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.content.res.Resources;
-import android.content.res.ThemeConfig;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Matrix;
 //import android.content.res.ThemeConfig;
 import android.graphics.Color;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.hardware.Sensor;
 import android.hardware.SensorManager;
@@ -45,12 +48,15 @@ import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.util.TypedValue;
+import android.view.Display;
 import android.view.IWindowManager;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
 
 import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -105,14 +111,7 @@ public final class DUActionUtils {
     }
 
     public static boolean navigationBarCanMove() {
-        boolean canMove = false;
-        try {
-            IWindowManager windowService = IWindowManager.Stub.asInterface(
-                    ServiceManager.getService("window"));
-            canMove = windowService.navigationBarCanMove();
-        } catch (Exception e) {
-        }
-        return canMove;
+        return Resources.getSystem().getConfiguration().smallestScreenWidthDp < 600;
     }
 
     public static boolean hasNavbarByDefault(Context context) {
@@ -450,13 +449,77 @@ public final class DUActionUtils {
     }
 
     public static Drawable getDrawable(Context context, Uri uri) {
+        //set inputs here so we can clean up them in the finally
+        InputStream inputStream = null;
         try {
-            InputStream inputStream = context.getContentResolver().openInputStream(uri);
-            return Drawable.createFromStream(inputStream, uri.toString());
+            //get the inputstream
+            inputStream = context.getContentResolver().openInputStream(uri);
+
+            //get available bitmapfactory options
+            BitmapFactory.Options options = new BitmapFactory.Options();
+            //query the bitmap to decode the stream but don't allocate pixels in memory yet
+            options.inJustDecodeBounds = true;
+            //decode the bitmap with calculated bounds
+            Bitmap b1 = BitmapFactory.decodeStream(inputStream, null, options);
+            //check if the bitmap is too big, if yes scale the quality
+            options.inSampleSize = calculateInSampleSize(options);
+
+            //We need to close and load again the inputstream to avoid null
+            try {
+                inputStream.close();
+            }
+            catch (IOException e) {
+                e.printStackTrace();
+            }
+            inputStream = context.getContentResolver().openInputStream(uri);
+
+            //decode the stream again, with the calculated SampleSize option, 
+            //and allocate the memory. Also add some metrics options to take a proper density
+            options.inJustDecodeBounds = false;
+            DisplayMetrics metrics = context.getResources().getDisplayMetrics();
+            options.inScreenDensity = metrics.densityDpi;
+            options.inTargetDensity = metrics.densityDpi;
+            options.inDensity = DisplayMetrics.DENSITY_DEFAULT;
+            b1 = BitmapFactory.decodeStream(inputStream, null, options);
+            return new BitmapDrawable(context.getResources(), b1);
         } catch (FileNotFoundException e) {
             e.printStackTrace();
             return null;
+        //clean up the system resources
+        } finally {
+                if (inputStream != null) {
+                    try {
+                        inputStream.close();
+                    }
+                    catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+         }
+    }
+
+    //Automate the quality scaling process
+    public static int calculateInSampleSize(BitmapFactory.Options options) {
+        //we do not scale quality if size is not more than 512x512
+        final int reqHeight = 512;
+        final int reqWidth = 512;
+        // get raw height and width of image
+        int height = options.outHeight;
+        int width = options.outWidth;
+        //do not scale quality for now
+        int inSampleSize = 1;
+
+        // If the img is too big, calculate the largest inSampleSize value that is a power of 2
+        //  and keeps both height and width larger than the requested height and width.
+        if (height > reqHeight || width > reqWidth) {
+            final int halfHeight = height / 2;
+            final int halfWidth = width / 2;
+            while ((halfHeight / inSampleSize) >= reqHeight
+                    && (halfWidth / inSampleSize) >= reqWidth) {
+                inSampleSize *= 2;
+            }
         }
+        return inSampleSize;
     }
 
     public static Drawable getDrawableFromComponent(PackageManager pm, String activity) {
@@ -620,6 +683,9 @@ public final class DUActionUtils {
         if (context == null || defRes == null || drawableName == null)
             return null;
 
+        // TODO: turn on cmte support when it comes back
+        return getDrawable(defRes, drawableName, PACKAGE_SYSTEMUI);
+/*
         ThemeConfig themeConfig = context.getResources().getConfiguration().themeConfig;
 
         Drawable d = null;
@@ -654,5 +720,6 @@ public final class DUActionUtils {
             d = getDrawable(defRes, drawableName, PACKAGE_SYSTEMUI);
         }
         return d;
+        */
     }
 }

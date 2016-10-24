@@ -33,6 +33,7 @@ import android.content.ContentResolver;
 import android.content.Context;
 import android.content.ComponentName;
 import android.content.Intent;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.res.Resources;
@@ -122,10 +123,10 @@ public class ActionHandler {
     public static final String SYSTEMUI_TASK_SOUNDMODE_VIB_SILENT = "task_soundmode_vib_silent";
     public static final String SYSTEMUI_TASK_WAKE_DEVICE = "task_wake_device";
     public static final String SYSTEMUI_TASK_STOP_SCREENPINNING = "task_stop_screenpinning";
-    public static final String SYSTEMUI_TASK_APP_PICKER = "task_app_picker";
-    public static final String SYSTEMUI_TASK_NOTIFICATION_CLEAR = "task_notification_clear";
+    public static final String SYSTEMUI_TASK_CLEAR_NOTIFICATIONS = "task_clear_notifications";
     public static final String SYSTEMUI_TASK_VOLUME_PANEL = "task_volume_panel";
     public static final String SYSTEMUI_TASK_EDITING_SMARTBAR = "task_editing_smartbar";
+    public static final String SYSTEMUI_TASK_SPLIT_SCREEN = "task_split_screen";
 
     public static final String INTENT_SHOW_POWER_MENU = "action_handler_show_power_menu";
     public static final String INTENT_TOGGLE_SCREENRECORD = "action_handler_toggle_screenrecord";
@@ -161,10 +162,10 @@ public class ActionHandler {
         ImeArrowLeft(SYSTEMUI_TASK_IME_NAVIGATION_LEFT, SYSTEMUI, "label_action_ime_left", "ic_sysbar_ime_left"),
         ImeArrowRight(SYSTEMUI_TASK_IME_NAVIGATION_RIGHT, SYSTEMUI, "label_action_ime_right", "ic_sysbar_ime_right"),
         ImeArrowUp(SYSTEMUI_TASK_IME_NAVIGATION_UP, SYSTEMUI, "label_action_ime_up", "ic_sysbar_ime_up"),
-        AppPicker(SYSTEMUI_TASK_APP_PICKER, SYSTEMUI, "label_action_app_picker", "ic_sysbar_app_picker"),
-        NotificationClear(SYSTEMUI_TASK_NOTIFICATION_CLEAR, SYSTEMUI, "label_action_notification_clear", "ic_qs_clear_notifications"),
+        ClearNotifications(SYSTEMUI_TASK_CLEAR_NOTIFICATIONS, SYSTEMUI, "label_action_clear_notifications", "ic_sysbar_clear_notifications"),
         VolumePanel(SYSTEMUI_TASK_VOLUME_PANEL, SYSTEMUI, "label_action_volume_panel", "ic_sysbar_volume_panel"),
-        EditingSmartbar(SYSTEMUI_TASK_EDITING_SMARTBAR, SYSTEMUI, "label_action_editing_smartbar", "ic_sysbar_editing_smartbar");
+        EditingSmartbar(SYSTEMUI_TASK_EDITING_SMARTBAR, SYSTEMUI, "label_action_editing_smartbar", "ic_sysbar_editing_smartbar"),
+        SplitScreen(SYSTEMUI_TASK_SPLIT_SCREEN, SYSTEMUI, "label_action_split_screen", "ic_sysbar_docked");
 
         String mAction;
         String mResPackage;
@@ -201,8 +202,8 @@ public class ActionHandler {
             SystemAction.StopScreenPinning, SystemAction.ImeArrowDown,
             SystemAction.ImeArrowLeft, SystemAction.ImeArrowRight,
             SystemAction.ImeArrowUp, SystemAction.InAppSearch,
-            SystemAction.AppPicker, SystemAction.NotificationClear,
-            SystemAction.VolumePanel, SystemAction.EditingSmartbar
+            SystemAction.VolumePanel, SystemAction.ClearNotifications,
+            SystemAction.EditingSmartbar, SystemAction.SplitScreen
     };
 
     public static class ActionIconResources {
@@ -263,6 +264,13 @@ public class ActionHandler {
             } else if (TextUtils.equals(action, SYSTEMUI_TASK_SCREENRECORD)) {
                 if (!DUActionUtils.getBoolean(context, "config_enableScreenrecordChord",
                         DUActionUtils.PACKAGE_ANDROID)) {
+                    continue;
+                }
+            } else if (TextUtils.equals(action, SYSTEMUI_TASK_EDITING_SMARTBAR)) {
+                // don't allow smartbar editor on Fling
+                if (Settings.Secure.getIntForUser(context.getContentResolver(),
+                        Settings.Secure.NAVIGATION_BAR_MODE, 0,
+                        UserHandle.USER_CURRENT) == 1) {
                     continue;
                 }
             }
@@ -343,7 +351,7 @@ public class ActionHandler {
             IStatusBarService service = getStatusBarService();
             if (service != null) {
                 try {
-                    service.expandSettingsPanel();
+                    service.expandSettingsPanel(null);
                 } catch (RemoteException e) {
                 }
             }
@@ -359,6 +367,16 @@ public class ActionHandler {
             }
         }
 
+        private static void splitScreen() {
+            IStatusBarService service = getStatusBarService();
+            if (service != null) {
+                try {
+                    service.toggleSplitScreen();
+                } catch (RemoteException e) {
+                }
+            }
+        }
+/*
         private static void fireIntentAfterKeyguard(Intent intent) {
             IStatusBarService service = getStatusBarService();
             if (service != null) {
@@ -368,7 +386,7 @@ public class ActionHandler {
                 }
             }
         }
-
+*/
         private static void clearAllNotifications() {
             IStatusBarService service = getStatusBarService();
             if (service != null) {
@@ -391,7 +409,7 @@ public class ActionHandler {
     public static void preloadRecentApps() {
         StatusBarHelper.preloadRecentApps();
     }
-
+/*
     public static void performTaskFromKeyguard(Context ctx, String action) {
         // null: throw it out
         if (action == null) {
@@ -408,7 +426,7 @@ public class ActionHandler {
             performTask(ctx, action);
         }
     }
-
+*/
     public static void performTask(Context context, String action) {
         // null: throw it out
         if (action == null) {
@@ -585,10 +603,7 @@ public class ActionHandler {
                 }
             }
             return;
-        } else if (action.equals(SYSTEMUI_TASK_APP_PICKER)) {
-            startAppPicker(context);
-            return;
-        } else if (action.equals(SYSTEMUI_TASK_NOTIFICATION_CLEAR)) {
+        } else if (action.equals(SYSTEMUI_TASK_CLEAR_NOTIFICATIONS)) {
             StatusBarHelper.clearAllNotifications();
             return;
         } else if (action.equals(SYSTEMUI_TASK_VOLUME_PANEL)) {
@@ -596,6 +611,9 @@ public class ActionHandler {
             return;
         } else if (action.equals(SYSTEMUI_TASK_EDITING_SMARTBAR)) {
             editingSmartbar(context);
+            return;
+        } else if (action.equals(SYSTEMUI_TASK_SPLIT_SCREEN)) {
+            StatusBarHelper.splitScreen();
             return;
         }
     }
@@ -627,11 +645,7 @@ public class ActionHandler {
         ActivityManager.RunningTaskInfo lastTask = getLastTask(context, am);
 
         if (lastTask != null) {
-            final ActivityOptions opts = ActivityOptions.makeCustomAnimation(context,
-                    DUActionUtils.getIdentifier(context, "last_app_in", "anim", DUActionUtils.PACKAGE_ANDROID),
-                    DUActionUtils.getIdentifier(context, "last_app_out", "anim", DUActionUtils.PACKAGE_ANDROID));
-            am.moveTaskToFront(lastTask.id, ActivityManager.MOVE_TASK_NO_USER_ACTION,
-                    opts.toBundle());
+            am.moveTaskToFront(lastTask.id, ActivityManager.MOVE_TASK_NO_USER_ACTION);
         }
     }
 
@@ -849,7 +863,7 @@ public class ActionHandler {
                     defaultHomePackage = res.activityInfo.packageName;
                 }
                 IActivityManager am = ActivityManagerNative.getDefault();
-                boolean targetKilled = false;
+                String pkgName;
                 List<RunningAppProcessInfo> apps = am.getRunningAppProcesses();
                 for (RunningAppProcessInfo appInfo : apps) {
                     int uid = appInfo.uid;
@@ -864,21 +878,39 @@ public class ActionHandler {
                                 if (!pkg.equals("com.android.systemui")
                                         && !pkg.equals(defaultHomePackage)
                                         && !pkg.equals("com.google.android.googlequicksearchbox")
+                                        && !pkg.equals("com.google.android.gms")
+                                        && !pkg.equals("com.google.android.ext.services")
+                                        && !pkg.equals("android.ext.services")
+                                        && !pkg.equals("net.nurik.roman.muzei")
+                                        && !pkg.equals("com.touchtype.swiftkey")
+                                    	&& !pkg.equals("net.dinglisch.android.taskerm")
                                         && !isPackageLiveWalls(context, pkg)) {
+                                    try {
+                                        ApplicationInfo applicationInfo = context
+                                                .getPackageManager().getPackageInfo(pkg, 0).applicationInfo;
+                                        pkgName = applicationInfo.loadLabel(
+                                                context.getPackageManager()).toString();
+                                    } catch (Exception e) {
+                                        // cheat just a little, highly unlikely event
+                                        pkgName = "App";
+                                    }
                                     am.forceStopPackage(pkg,
                                             UserHandle.USER_CURRENT);
-                                    targetKilled = true;
-                                    break;
+                                    Resources systemUIRes = DUActionUtils.getResourcesForPackage(context, DUActionUtils.PACKAGE_SYSTEMUI);
+                                    int ident = systemUIRes.getIdentifier("app_killed_message", DUActionUtils.STRING, DUActionUtils.PACKAGE_SYSTEMUI);
+                                    String toastMsg = systemUIRes.getString(ident, pkgName);
+                                    Toast.makeText(context, toastMsg, Toast.LENGTH_SHORT).show();
+                                    return;
                                 }
                             }
                         } else {
+                            pkgName = appInfo.processName;
                             Process.killProcess(appInfo.pid);
-                            targetKilled = true;
-                        }
-                        if (targetKilled) {
-                            Toast.makeText(context, com.android.internal.R.string.app_killed_message,
-                                    Toast.LENGTH_SHORT).show();
-                            break;
+                            Resources systemUIRes = DUActionUtils.getResourcesForPackage(context, DUActionUtils.PACKAGE_SYSTEMUI);
+                            int ident = systemUIRes.getIdentifier("app_killed_message", DUActionUtils.STRING, DUActionUtils.PACKAGE_SYSTEMUI);
+                            String toastMsg = systemUIRes.getString(ident, pkgName);
+                            Toast.makeText(context, toastMsg, Toast.LENGTH_SHORT).show();
+                            return;
                         }
                     }
                 }
@@ -934,7 +966,8 @@ public class ActionHandler {
 
     public static void turnOffLockTask() {
         try {
-            ActivityManagerNative.getDefault().stopLockTaskModeOnCurrent();
+//            ActivityManagerNative.getDefault().stopLockTaskModeOnCurrent();
+        	ActivityManagerNative.getDefault().stopLockTaskMode();
         } catch (Exception e) {
         }
     }
@@ -950,18 +983,6 @@ public class ActionHandler {
     private static void showPowerMenu(Context context) {
         context.sendBroadcastAsUser(new Intent(INTENT_SHOW_POWER_MENU), new UserHandle(
                 UserHandle.USER_ALL));
-    }
-
-    private static void startAppPicker(Context context) {
-        final Intent APP_PICKER = new Intent().setComponent(new ComponentName(
-            "com.android.systemui", "com.android.systemui.aicp.apppicker.AppPickerActivity"));
-        if (APP_PICKER != null) {
-            try {
-                context.startActivityAsUser(APP_PICKER, UserHandle.CURRENT);
-            } catch (ActivityNotFoundException e) {
-                Slog.w(TAG, "No activity to handle application picker.", e);
-            }
-        }
     }
 
     public static void volumePanel(Context context) {
